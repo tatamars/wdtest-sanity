@@ -1,182 +1,120 @@
-import slack
 import os
-from pathlib import Path
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 from dotenv import load_dotenv
 from flask import Flask, request, Response
-from slackeventsapi import SlackEventAdapter
-import string
-from datetime import datetime, timedelta
+from bfxapi import Client, REST_HOST
+from bfxapi.types import Notification, Order
+from typing import List
+from bfxapi.types import Wallet, Transfer, DepositAddress, LightningNetworkInvoice, Withdrawal, Notification, FundingOffer
+from bfxapi.enums import FundingOfferType, Flag, OrderType
 import time
 
+app = Flask(__name__)
 load_dotenv()
 
-app = Flask(__name__)
-slack_event_adapter = SlackEventAdapter(
-    os.environ['SIGNING_SECRET_'], '/slack/events', app)
+client1 = WebClient(token=os.environ['SLACK_BOT_TOKEN'])
+bfx = Client(
+    rest_host=REST_HOST,
+    api_key="",
+    api_secret=""
+)
 
-client = slack.WebClient(token=os.environ['SLACK_TOKEN_'])
-BOT_ID = client.api_call("auth.test")['user_id']
+try:
+    response = client1.chat_postMessage(channel='#test-environment', text="Hello world!")
+    assert response["message"]["text"] == "Hello world!"
+except SlackApiError as e:
+    # You will get a SlackApiError if "ok" is False
+    assert e.response["ok"] is False
+    assert e.response["error"]  # str like 'invalid_auth', 'channel_not_found'
+    print(f"Got an error: {e.response['error']}")
 
-message_counts = {}
-welcome_messages = {}
-
-BAD_WORDS = ['hmm', 'no', 'tim']
-
-SCHEDULED_MESSAGES = [
-    {'text': 'First message', 'post_at': (
-        datetime.now() + timedelta(seconds=20)).timestamp(), 'channel': 'C01BXQNT598'},
-    {'text': 'Second Message!', 'post_at': (
-        datetime.now() + timedelta(seconds=30)).timestamp(), 'channel': 'C01BXQNT598'}
-]
-
-
-class WelcomeMessage:
-    START_TEXT = {
-        'type': 'section',
-        'text': {
-            'type': 'mrkdwn',
-            'text': (
-                'Welcome to this awesome channel! \n\n'
-                '*Get started by completing the tasks!*'
-            )
-        }
+def get_whitelisted_address_and_method(currency):
+    whitelisted_addresses = {
+        "XRP": ("rNxp4h8apvRis6mJf9Sh8C6iRxfrDWN7AV:304061413", "XRP"),
+        "TRX": ("TPF63HGEKpwKo7dwvHDD1nRv6VvTgXKeHk", "TRX"),
+        "USX": ("TPF63HGEKpwKo7dwvHDD1nRv6VvTgXKeHk", "TETHERUSX"),
+        "USDTSOL": ("B3ZYXkFyBa2rrnFfpMtEftx3gJYhm3SL82moi2AdrwRA", "TETHERUSDTSOL"),
+        "USDTXTZ": ("tz28Q3s1ibGY8AHdbXnuP9PBqVyDYywaSLgZ", "TETHERUSDTXTZ"),
+        "USDTNEAR": ("c2b44c923c212e93600e0fe29265895a4b3fbaaf62b2518b7a4dd905d1e108cf", "TETHERUSDTNEAR"),
+        "USDTDOT": ("12kYRnFXTYBTLuTKJFY51ZAc63S2Gra7fpcYxLEFhLfdW47o", "TETHERUSDTDOT"),
+        "USDTPLY": ("0x256fb9a6b489010c9b916e7456049ae6807fc26a", "TETHERUSDTPLY"),
+        "USDTAVAX": ("0x256fb9a6b489010c9b916e7456049ae6807fc26a", "TETHERUSDTAVAX"),
+        "ARBETH": ("0x256fb9a6b489010c9b916e7456049ae6807fc26a", "ARBETH"),
+        "ARB": ("0x256fb9a6b489010c9b916e7456049ae6807fc26a", "ARB"),
+        # ... (other entries)
     }
+    
+    if currency in whitelisted_addresses:
+        address, method = whitelisted_addresses[currency]
+        return address, method
+    else:
+        return None, None
 
-    DIVIDER = {'type': 'divider'}
-
-    def __init__(self, channel):
-        self.channel = channel
-        self.icon_emoji = ':robot_face:'
-        self.timestamp = ''
-        self.completed = False
-
-    def get_message(self):
-        return {
-            'ts': self.timestamp,
-            'channel': self.channel,
-            'username': 'Welcome Robot!',
-            'icon_emoji': self.icon_emoji,
-            'blocks': [
-                self.START_TEXT,
-                self.DIVIDER,
-                self._get_reaction_task()
-            ]
-        }
-
-    def _get_reaction_task(self):
-        checkmark = ':white_check_mark:'
-        if not self.completed:
-            checkmark = ':white_large_square:'
-
-        text = f'{checkmark} *React to this message!*'
-
-        return {'type': 'section', 'text': {'type': 'mrkdwn', 'text': text}}
-
-
-def send_welcome_message(channel, user):
-    if channel not in welcome_messages:
-        welcome_messages[channel] = {}
-
-    if user in welcome_messages[channel]:
-        return
-
-    welcome = WelcomeMessage(channel)
-    message = welcome.get_message()
-    response = client.chat_postMessage(**message)
-    welcome.timestamp = response['ts']
-
-    welcome_messages[channel][user] = welcome
-
-
-def list_scheduled_messages(channel):
-    response = client.chat_scheduledMessages_list(channel=channel)
-    messages = response.data.get('scheduled_messages')
-    ids = []
-    for msg in messages:
-        ids.append(msg.get('id'))
-
-    return ids
-
-
-def schedule_messages(messages):
-    ids = []
-    for msg in messages:
-        response = client.chat_scheduleMessage(
-            channel=msg['channel'], text=msg['text'], post_at=msg['post_at']).data
-        id_ = response.get('scheduled_message_id')
-        ids.append(id_)
-
-    return ids
-
-
-def delete_scheduled_messages(ids, channel):
-    for _id in ids:
-        try:
-            client.chat_deleteScheduledMessage(
-                channel=channel, scheduled_message_id=_id)
-        except Exception as e:
-            print(e)
-
-
-def check_if_bad_words(message):
-    msg = message.lower()
-    msg = msg.translate(str.maketrans('', '', string.punctuation))
-
-    return any(word in msg for word in BAD_WORDS)
-
-
-@ slack_event_adapter.on('message')
-def message(payload):
-    event = payload.get('event', {})
-    channel_id = event.get('channel')
-    user_id = event.get('user')
-    text = event.get('text')
-
-    if user_id != None and BOT_ID != user_id:
-        if user_id in message_counts:
-            message_counts[user_id] += 1
-        else:
-            message_counts[user_id] = 1
-
-        if text.lower() == 'start':
-            send_welcome_message(f'@{user_id}', user_id)
-        elif check_if_bad_words(text):
-            ts = event.get('ts')
-            client.chat_postMessage(
-                channel=channel_id, thread_ts=ts, text="THAT IS A BAD WORD!")
-
-
-@ slack_event_adapter.on('reaction_added')
-def reaction(payload):
-    event = payload.get('event', {})
-    channel_id = event.get('item', {}).get('channel')
-    user_id = event.get('user')
-
-    if f'@{user_id}' not in welcome_messages:
-        return
-
-    welcome = welcome_messages[f'@{user_id}'][user_id]
-    welcome.completed = True
-    welcome.channel = channel_id
-    message = welcome.get_message()
-    updated_message = client.chat_update(**message)
-    welcome.timestamp = updated_message['ts']
-
-
-@ app.route('/message-count', methods=['POST'])
+@ app.route('/withdraw', methods=['POST'])
 def message_count():
-    data = request.form
-    user_id = data.get('user_id')
-    channel_id = data.get('channel_id')
-    message_count = message_counts.get(user_id, 0)
-
-    client.chat_postMessage(
-        channel=channel_id, text=f"Message: {message_count}")
+    wallets: List[Wallet] = bfx.rest.auth.get_wallets()
+    currency = request.form.get('text')
+    print("Wallets", wallets, currency)
+    receiver_address, wdmethod = get_whitelisted_address_and_method(currency)
+    print("destination address:", receiver_address, "method:", wdmethod)
+    D: Notification[Withdrawal] = bfx.rest.auth.submit_wallet_withdrawal(wallet="exchange", method=wdmethod, address=receiver_address, amount=5.0)
+    print("Withdrawal:", D.text)
+    response1 = client1.chat_postMessage(channel='#test-environment', text=f":ballot_box_with_check:  Withdrawal submitted => {D.status}\nMethod: {D.data.method}\nResponse:{D.text}")
     return Response(), 200
 
+@ app.route('/generateaddress', methods=['POST'])
+def generate_address():
+    currency_default = 'USX'
+    currency = request.form.get('text')
+    if request.form.get('text') == 'None' or request.form.get('text') == '' or request.form.get('text') == 'none':
+        currency = currency_default
+    print(currency)
+    currency, method = get_whitelisted_address_and_method(currency)
+    print(method)
+    B: Notification[DepositAddress] = bfx.rest.auth.get_deposit_address(wallet="exchange", method=method, renew=True)
+    print("Deposit address:", B.data)
+    responseaddress = client1.chat_postMessage(channel='#test-environment', text=f":ballot_box_with_check:  Deposit Address Generated => \nStatus: {B.text}\nDeposit Address: {B.data.address}")
+    return Response(), 200
+
+@ app.route('/testfunding', methods=['POST'])
+def test_funding():
+    notification: Notification[FundingOffer] = bfx.rest.auth.submit_funding_offer(
+    type=FundingOfferType.LIMIT,
+    symbol="fUST",
+    amount=150.00,
+    rate=0.069,
+    period=2,
+    flags=Flag.HIDDEN
+    )
+    offers = bfx.rest.auth.get_funding_offers(symbol="fUST")
+    responseoffers = client1.chat_postMessage(channel='#test-environment', text=f":ballot_box_with_check: {offers}")
+    cancel = bfx.rest.auth.cancel_all_funding_offers(currency="UST")
+    offers_after_cancel = bfx.rest.auth.get_funding_offers(symbol="fUST")
+    responseoffer_after_cancel = client1.chat_postMessage(channel='#test-environment', text=f":ballot_box_with_check: Cancellation update, active offers (by the way: if nothing is shown, it means I could cancel the funding offer) = {offers_after_cancel}")
+    return Response(), 200
+
+@ app.route('/testtrading', methods=['POST'])
+def test_trading():
+    submit_order_notification: Notification[Order] = bfx.rest.auth.submit_order(
+        type=OrderType.EXCHANGE_LIMIT,
+        symbol="tBTCUST",
+        amount=0.0001,
+        price='25000',
+        flags=Flag.HIDDEN
+    )
+    orders = bfx.rest.auth.get_orders(symbol='tBTCUST')
+    responseoffers = client1.chat_postMessage(channel='#test-environment', text=f":ballot_box_with_check: {orders}")
+    return Response(), 200
+
+@ app.route('/testplatform', methods=['POST'])
+def general_test():
+    test_trading()
+    test_funding()
+    generate_address()
+    return Response(), 200
+
+    
 
 if __name__ == "__main__":
-    schedule_messages(SCHEDULED_MESSAGES)
-    ids = list_scheduled_messages('C01BXQNT598')
-    delete_scheduled_messages(ids, 'C01BXQNT598')
     app.run(debug=True)
