@@ -31,18 +31,18 @@ bfx = Client(
 
 def get_whitelisted_address_and_method(currency):
     whitelisted_addresses = {
-        "ETH": ("0x256fb9a6b489010c9b916e7456049ae6807fc26a", "ETHEREUM", "ETH", "tETHUSD"),        
-        "XRP": ("rNxp4h8apvRis6mJf9Sh8C6iRxfrDWN7AV:304061413", "XRP", "XRP", "tXRPUSD"),
-        "TRX": ("TPF63HGEKpwKo7dwvHDD1nRv6VvTgXKeHk", "TRX", "TRX", "tTRXUSD"),
+        "ETH": ("", "ETHEREUM", "ETH", "tETHUSD"),        
+        "XRP": (":304061413", "XRP", "XRP", "tXRPUSD"),
+        "TRX": ("", "TRX", "TRX", "tTRXUSD"),
         "USX": ("TPF63HGEKpwKo7dwvHDD1nRv6VvTgXKeHk", "TETHERUSX", "UST", "tUSTUSD"),
-        "USDTSOL": ("B3ZYXkFyBa2rrnFfpMtEftx3gJYhm3SL82moi2AdrwRA", "TETHERUSDTSOL", "UST", "tUSTUSD"),
-        "USDTXTZ": ("tz28Q3s1ibGY8AHdbXnuP9PBqVyDYywaSLgZ", "TETHERUSDTXTZ", "UST", "tUSTUSD"),
-        "USDTNEAR": ("c2b44c923c212e93600e0fe29265895a4b3fbaaf62b2518b7a4dd905d1e108cf", "TETHERUSDTNEAR", "UST", "tUSTUSD"),
-        "USDTDOT": ("12kYRnFXTYBTLuTKJFY51ZAc63S2Gra7fpcYxLEFhLfdW47o", "TETHERUSDTDOT", "UST", "tUSTUSD"),
-        "USDTPLY": ("0x256fb9a6b489010c9b916e7456049ae6807fc26a", "TETHERUSDTPLY", "UST", "tUSTUSD"),
-        "USDTAVAX": ("0x256fb9a6b489010c9b916e7456049ae6807fc26a", "TETHERUSDTAVAX", "UST", "tUSTUSD"),
-        "ARBETH": ("0x256fb9a6b489010c9b916e7456049ae6807fc26a", "ARBETH", "ARBETH", "tUSTUSD"),
-        "ARB": ("0x256fb9a6b489010c9b916e7456049ae6807fc26a", "ARB", "ARB", "tUSTUSD"),
+        "USDTSOL": ("", "TETHERUSDTSOL", "UST", "tUSTUSD"),
+        "USDTXTZ": ("", "TETHERUSDTXTZ", "UST", "tUSTUSD"),
+        "USDTNEAR": ("", "TETHERUSDTNEAR", "UST", "tUSTUSD"),
+        "USDTDOT": ("", "TETHERUSDTDOT", "UST", "tUSTUSD"),
+        "USDTPLY": ("", "TETHERUSDTPLY", "UST", "tUSTUSD"),
+        "USDTAVAX": ("", "TETHERUSDTAVAX", "UST", "tUSTUSD"),
+        "ARBETH": ("", "ARBETH", "ARBETH", "tUSTUSD"),
+        "ARB": ("", "ARB", "ARB", "tUSTUSD"),
         # ... (other entries)
     }
     
